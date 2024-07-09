@@ -34,41 +34,57 @@ import time
 from kobuki_msgs.msg import BumperEvent
 
 class RealWorld():
-
+# lidar + 0.01
     def __init__(self):
         # Launch the simulation with the given launchfile name
         rospy.init_node('RealWorld', anonymous=False)
 #        self.cmd_vel = rospy.Publisher('cmd_vel_mux/input/navi', Twist, queue_size = 10)
+
+        # 创建发布者，用于发送速度命令
         self.cmd_vel = rospy.Publisher('cmd_vel_mux/input/navi', Twist, queue_size = 10)
 #        self.action_table = [[-1.,-1.],[-1.,0.],[-1.,1.],[0.,-1.],[0.,0.],[0.,1.],[1.,-1.],[1.,0.],[1.,1.]]
-        self.max_action = [0.5,np.pi/2]
-        self.min_action = [0.0,-np.pi/2]
-        self.max_acc = [0.5,np.pi/2]
-        self.self_speed = [0.3, 0.0]
+
+        # 设置动作和加速度的限制
+        self.max_action = [0.5, np.pi/2]  # 最大线速度和角速度
+        self.min_action = [0.0, -np.pi/2]  # 最小线速度和角速度
+        self.max_acc = [0.5, np.pi/2]  # 最大线加速度和角加速度
+        self.self_speed = [0.3, 0.0]  # 初始速度
+
+        # 订阅机器人位姿和速度信息
         self.robot_pose_sub = rospy.Subscriber("amcl_pose", PoseWithCovarianceStamped,self.PoseCallback) 
         self.robot_twist_sub = rospy.Subscriber("/odom", Odometry,self.TwistCallback) 
-        self.target_position=[-0.10,1.53]
-        self.targets=[[-0.10,1.53],[-2.4,-0.05],[-4.1,-0.739],[0.0,-0.663]]
+
+        # 设置目标位置和多个目标点
+        self.target_position = [-0.10, 1.53]
+        self.targets = [[-0.10, 1.53], [-2.4, -0.05], [-4.1, -0.739], [0.0, -0.663]]
         self.count = 0
+
         #the size of the real robot
         self.max_action[0] = 0.5
         self.max_action[1] = np.pi/2
         self.max_acc[0] = 1.0
         self.max_acc[1] = np.pi
         #print("action bound is", self.max_action,"acc bound is", self.max_acc)
-        self.length1=0.2  # front length : action core -> base
-        self.length2=0.4  # back length : action core -> base
-        self.width=0.2  # half width
-        self.control_period=0.2
+
+        # 设置机器人的物理参数
+        self.length1=0.15  # front length : action core -> base  -> 0.15 (core <-> camera)
+        self.length2=0.51  # back length : action core -> base -> 0.51 (core <-> back)
+        self.width=0.375  # half width  -> 0.375
+        self.control_period=0.2  # 控制周期
 #        rospy.sleep(2.)
         # self.marker_publisher = rospy.Publisher('visualization_marker', Marker, queue_size=0)
         self.countm = 1
 #        rospy.sleep(2.0)                                                             
 #        self.show_text_in_rviz(marker_publisher, 'Goal',self.target_position[0],self.target_position[1])
+
+    # 回调函数，用于更新机器人速度
     def PoseCallback(self, pose):
         self.robot_pose = pose
+
+    # 回调函数，用于更新机器人速度
     def TwistCallback(self, twist):
         self.robot_twist = twist
+
     # def show_text_in_rviz(self, goal_x,goal_y):
     #     if self.countm<=3:
     #         scale1 = 0.5
@@ -98,11 +114,13 @@ class RealWorld():
     #     self.marker_publisher.publish(marker1)
     #     self.countm = self.countm+1
 
+    # 将激光扫描数据离散化
     def discretize_observation(self,data,new_ranges):
         discretized_ranges = []
         state = []
         min_range = 0.2
         done = False
+
 #        mod = 720/new_ranges
 #        for i in range(1080):
 #            if data.ranges[i]<0.2:
@@ -131,22 +149,44 @@ class RealWorld():
 #            print(np.min(state))
         return state,done
 
-
+    # 执行一步动作并返回新的状态
     def step(self):
         data = None
         terminate= False
         reset=False
+
+        # 获取激光扫描数据
         while data is None:
             try:
-                data = rospy.wait_for_message('/scan', LaserScan, timeout=10)
+                data = rospy.wait_for_message('/scan_fusion', LaserScan, timeout=10)  # /scan -> /scan_fusion
+                # new code : add offset to the data.ranges(laser_link -> base_link)
+                # 添加偏移量
+                data_ranges = np.array(data.ranges) + 0.05
+
+                 # new code : turn data 90 degrees to fit the teacher's tf 
+                # 旋转数据90度（顺时针）
+                rotated_ranges = np.zeros_like(data_ranges)
+                rotation_index = int(len(data_ranges) * 0.25)  # 90度对应四分之一的数组长度
+                rotated_ranges = np.roll(data_ranges, rotation_index)
+
+                # 更新LaserScan消息
+                data.ranges = rotated_ranges.tolist()
+
+                # 调整角度相关的参数
+                data.angle_min = (data.angle_min - np.pi/2) % (2*np.pi) - np.pi
+                data.angle_max = (data.angle_max - np.pi/2) % (2*np.pi) - np.pi
+                if data.angle_max < data.angle_min:
+                    data.angle_max += 2*np.pi
+
             except:
                 pass
-        state,done = self.discretize_observation(data,360)
-        state = np.reshape(state,(360))
+        state,done = self.discretize_observation(data,1667)
+        state = np.reshape(state,(1667))  # 360 points 
         
+        # 处理激光扫描数据
         pool_state = np.zeros((90,6))  # min_pooling - > 90
         for i in range(90):
-            pool_state[i,0] = np.cos(i*np.pi/45.0-np.pi*3/2+np.pi/90)  # 
+            pool_state[i,0] = np.cos(i*np.pi/45.0-np.pi*3/2+np.pi/90)  # direction angle 
             pool_state[i,1] = np.sin(i*np.pi/45.0-np.pi*3/2+np.pi/90)
             dis = np.min(state[4*i:(4*i+4)])
             x_dis = pool_state[i,0]*dis
@@ -163,17 +203,23 @@ class RealWorld():
         pool_state = np.reshape(pool_state,(540))
 #        print(state)
         reward = 1
+
+        # 计算相对于目标的位置和角度
         in_pose = self.robot_pose.pose.pose
         position = [in_pose.position.x,in_pose.position.y]
         abs_x = self.target_position[0] - in_pose.position.x
         abs_y = self.target_position[1] - in_pose.position.y
         (roll, pitch, yaw) = euler_from_quaternion ([in_pose.orientation.x,in_pose.orientation.y,in_pose.orientation.z,in_pose.orientation.w])
+        
+        # ... (计算相对距离和角度)
         trans_matrix = np.matrix([[np.cos(yaw), np.sin(yaw)], [-np.sin(yaw), np.cos(yaw)]])
         rela = np.matmul(trans_matrix,np.array([[abs_x],[abs_y]]))
         rela_x = rela[0,0]
         rela_y = rela[1,0]
         rela_distance = np.sqrt(rela_x** 2 + rela_y ** 2)
         rela_angle = np.arctan2(rela_y,rela_x)
+
+        # 检查是否到达目标
         if rela_distance<=0.2:
             terminate=True
             reset = True
@@ -184,6 +230,8 @@ class RealWorld():
 #            reset = True
 #        print(rela_distance)
 #        print(rela_angle)
+
+        # 构建状态向量
         target_pose = [rela_distance,rela_angle]
         in_twist = self.robot_twist.twist.twist
         v = in_twist.linear.x
@@ -192,14 +240,20 @@ class RealWorld():
         state = np.concatenate([pool_state,target_pose,cur_act,[self.max_action[0],self.max_action[1], self.max_acc[0], self.max_acc[1]]], axis=0)
 #        cur_act[0] = cur_act[0]
         return state,reward, terminate,reset,position
+    
+
+    # 控制机器人移动
     def Control(self,action):
         in_twist = self.robot_twist.twist.twist
         v = in_twist.linear.x
         w = in_twist.angular.z
+
+        # 计算新的速度，考虑加速度限制
         self.self_speed[0] = np.clip(action[0]*self.max_action[0],v-self.max_acc[0]*self.control_period,v+self.max_acc[0]*self.control_period)
 #        print(self.self_speed[0])        
         self.self_speed[1] =  np.clip(action[1]*self.max_action[1],w-self.max_acc[1]*self.control_period,w+self.max_acc[1]*self.control_period)
 
+        # 发布速度命令
         move_cmd = Twist()
         move_cmd.linear.x = self.self_speed[0]
         move_cmd.linear.y = 0.
@@ -208,16 +262,21 @@ class RealWorld():
         move_cmd.angular.y = 0.
         move_cmd.angular.z = self.self_speed[1]
         self.cmd_vel.publish(move_cmd)
+
+    # 发布新的目标点
     def publish_goal(self):
         self.target_position[0] =  self.targets[self.count][0]
         self.target_position[1] =  self.targets[self.count][1]
         self.count = self.count+1
+
+    # 停止机器人
     def stop(self):
         move_cmd = Twist()
         move_cmd.linear.x = 0
         move_cmd.angular.z = 0
         self.cmd_vel.publish(move_cmd)
         
+    # 重置环境
     def reset(self):
         # Resets the state of the environment and returns an initial observation.
 #        rospy.sleep(4.0)
