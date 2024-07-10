@@ -34,6 +34,9 @@ def rotate_laserscan(scan_msg, axis, angle_degrees):
         rotated_scan.ranges = np.roll(scan_msg.ranges, rotation_index).tolist()
         rotated_scan.angle_min += angle_radians
         rotated_scan.angle_max += angle_radians
+        # 确保角度在 [-pi, pi]范围内
+        rotated_scan.angle_min = (rotated_scan.angle_min + np.pi) % (2 * np.pi) - np.pi
+        rotated_scan.angle_max = (rotated_scan.angle_max + np.pi) % (2 * np.pi) - np.pi
     else:
         raise ValueError("Axis must be 'x', 'y', or 'z'")
 
