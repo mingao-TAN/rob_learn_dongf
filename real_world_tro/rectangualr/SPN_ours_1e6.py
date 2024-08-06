@@ -474,7 +474,7 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
                                      d_ph: batch['done'],
                                     }
 #                            print(batch['obs1'])
-                            outs = sess.run(step_ops1, feed_dict) 
+                            outs = sess.run(step_ops1, feed_zhwdict) 
                             outs = sess.run(step_ops2, feed_dict)
                                 # testing the agent every 5000 training steps 
                             if T%10000==0:

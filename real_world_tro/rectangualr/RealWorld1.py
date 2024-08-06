@@ -1,15 +1,16 @@
+# -*- coding: utf-8 -*-
 #!/usr/bin/env python
 import rospy
 import roslib
 import roslaunch
-import time
 import numpy as np
 import tf
 import cv2
-import sys
+# import sys
 import os
 import random
-import traceback 
+import math
+import traceback  
 import subprocess
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Pose
@@ -18,21 +19,22 @@ from sensor_msgs.msg import LaserScan
 from tf.transformations import euler_from_quaternion
 from nav_msgs.msg import Path
 from nav_msgs.msg import Odometry
-import time
+from visualization_msgs.msg import Marker
 import copy
 import tf
-from kobuki_msgs.msg import BumperEvent
+#  from kobuki_msgs.msg import BumperEvent
 from geometry_msgs.msg import PoseWithCovarianceStamped, Point, Quaternion, Vector3
 from visualization_msgs.msg import Marker
 from std_msgs.msg import Header, ColorRGBA
 import sys
 sys.path.append('/home/zhw/usb_4_mic_array')
-from tuning import Tuning
-import usb.core
-import usb.util
+# sys.path.append('/home/zhw/usb_4_mic_array')
+# from tuning import Tuning
+# import usb.core
+# import usb.util
 import time
-from kobuki_msgs.msg import BumperEvent
-
+#  from kobuki_msgs.msg import BumperEvent
+np.set_printoptions(threshold=np.inf)
 class RealWorld():
 # lidar + 0.01
     def __init__(self):
@@ -41,34 +43,48 @@ class RealWorld():
 #        self.cmd_vel = rospy.Publisher('cmd_vel_mux/input/navi', Twist, queue_size = 10)
 
         # 创建发布者，用于发送速度命令
-        self.cmd_vel = rospy.Publisher('cmd_vel_mux/input/navi', Twist, queue_size = 10)
+        # self.cmd_vel = rospy.Publisher('cmd_vel_mux/input/navi', Twist, queue_size = 10)
+        # 测试 test
+        self.cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
 #        self.action_table = [[-1.,-1.],[-1.,0.],[-1.,1.],[0.,-1.],[0.,0.],[0.,1.],[1.,-1.],[1.,0.],[1.,1.]]
 
         # 设置动作和加速度的限制
-        self.max_action = [0.5, np.pi/2]  # 最大线速度和角速度
-        self.min_action = [0.0, -np.pi/2]  # 最小线速度和角速度
-        self.max_acc = [0.5, np.pi/2]  # 最大线加速度和角加速度
-        self.self_speed = [0.3, 0.0]  # 初始速度
-
-        # 订阅机器人位姿和速度信息
+        # #self.max_action = [0.5, np.pi/2]  # 最大线速度和角速度
+        #快的情况
+        # self.max_action = [1.0, np.pi/2]  # 最大线速度和角速度
+        # self.min_action = [0.0, 0.0]  # 最小线速度和角速度
+        # self.max_acc = [1.0, np.pi]  # 最大线加速度和角加速度
+        # self.self_speed = [0.3, 0.3]  # 初始速度
+        #慢的情况
+        self.max_action = [0.5, 0.5]  # 最大线速度和角速度
+        self.min_action = [0.0, 0.0]  # 最小线速度和角速度
+        self.max_acc = [1.0, np.pi]  # 最大线加速度和角加速度
+        self.self_speed = [0.3, 0.3]  # 初始速度
+        
+        # 订阅机器人位姿和速度信息 1. 自适应蒙特卡洛方法 2.里程计信息
         self.robot_pose_sub = rospy.Subscriber("amcl_pose", PoseWithCovarianceStamped,self.PoseCallback) 
         self.robot_twist_sub = rospy.Subscriber("/odom", Odometry,self.TwistCallback) 
-
+        # update
+        self.marker_pub = rospy.Publisher('pool_state_marker', Marker, queue_size=10)
         # 设置目标位置和多个目标点
-        self.target_position = [-0.10, 1.53]
-        self.targets = [[-0.10, 1.53], [-2.4, -0.05], [-4.1, -0.739], [0.0, -0.663]]
+        # self.target_position = [-0.10, 1.53]
+        # self.targets = [[-0.10, 1.53], [-2.4, -0.05], [-4.1, -0.739], [0.0, -0.663]]
+        # self.count = 0
+    
+        self.target_position = [2.79, -3.5]
+        self.targets = [ [2.79, -3.5] ,[0.05, -4.24] ]
         self.count = 0
 
         #the size of the real robot
-        self.max_action[0] = 0.5
-        self.max_action[1] = np.pi/2
-        self.max_acc[0] = 1.0
-        self.max_acc[1] = np.pi
-        #print("action bound is", self.max_action,"acc bound is", self.max_acc)
+        # self.max_action[0] = 0.5
+        # self.max_action[1] = np.pi/2
+        # self.max_acc[0] = 1.0
+        # self.max_acc[1] = np.pi
+        print("action bound is", self.max_action,"acc bound is", self.max_acc)
 
-        # 设置机器人的物理参数
-        self.length1=0.15  # front length : action core -> base  -> 0.15 (core <-> camera)
-        self.length2=0.51  # back length : action core -> base -> 0.51 (core <-> back)
+        # 设置机器人的物理参数 更新版本 存在问题；
+        self.length1=0.210 # front length : action core -> base  -> 0.15 (core <-> camera)
+        self.length2=0.510 # back length : action core -> base -> 0.51 (core <-> back)
         self.width=0.375  # half width  -> 0.375
         self.control_period=0.2  # 控制周期
 #        rospy.sleep(2.)
@@ -76,78 +92,147 @@ class RealWorld():
         self.countm = 1
 #        rospy.sleep(2.0)                                                             
 #        self.show_text_in_rviz(marker_publisher, 'Goal',self.target_position[0],self.target_position[1])
+    #### update 724: 发布相关状态 ####
+    def publish_pool_state(self, pool_state):
+        marker = Marker()
+        marker.header.frame_id = "base_link"
+        marker.header.stamp = rospy.Time.now()
+        marker.ns = "pool_state"
+        marker.id = 0
+        marker.type = Marker.POINTS
+        marker.action = Marker.ADD
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = 0.1
+        marker.scale.y = 0.1
+        marker.color.a = 1.0
+        marker.color.r = 1.0
+        marker.color.g = 0.0
+        marker.color.b = 0.0
 
-    # 回调函数，用于更新机器人速度
+        for i in range(pool_state.shape[0]):
+            y = -pool_state[i, 0] * pool_state[i, 2]
+            x =  pool_state[i, 1] * pool_state[i, 2]
+            z = 0
+            p = Point()
+            p.x = x
+            p.y = y
+            p.z = z
+            marker.points.append(p)
+
+        self.marker_pub.publish(marker) 
+
+          #### update 724: 发布相关状态 ####     
+    
+    # 回调函数，用于更新机器人位姿
     def PoseCallback(self, pose):
         self.robot_pose = pose
 
-    # 回调函数，用于更新机器人速度
+    # 回调函数，用于更新机器人速度150
     def TwistCallback(self, twist):
         self.robot_twist = twist
+    
+#     # 将激光扫描数据离散化
+    def discretize_observation(self,data):
+         discretized_ranges = []
+         state = []
+         min_range = 0.2
+         done = False
+        
+ #        mod = 720/new_ranges
+ #        for i in range(1080):
+##            if data.ranges[i]<0.2:
+ #                print(i)
+ #                print(data.ranges[i])
+ #            print(1111111111111111111111111111111111111111111111)
+         # for i, item in enumerate(resampled_ranges):
+         #     # if data.intensities[i]<100:
+            
+         for i, item in enumerate(data.ranges):
+             # if data.intensities[i]<100:
+             #     discretized_ranges.append(3.5)
+             if data.ranges[i] == float ('Inf'):
+                 discretized_ranges.append(3.5)
+             elif np.isnan(data.ranges[i]):
+                 discretized_ranges.append(0)
+            #  elif data.ranges[i]>3.5:
+            #      discretized_ranges.append(3.5) 
+             # elif data.ranges[i]<0.1:
+             #       discretized_ranges.append(3.5)                   
+             else:
+                 discretized_ranges.append((data.ranges[i]))
+        #  region_size = len(discretized_ranges) // new_ranges
+                
+        #  for i in range(new_ranges):
+        #      start_idx = i * region_size
+        #      end_idx = (i + 1) * region_size if i !=new_ranges - 1 else len(discretized_ranges)
 
-    # def show_text_in_rviz(self, goal_x,goal_y):
-    #     if self.countm<=3:
-    #         scale1 = 0.5
-    #         color1 = ColorRGBA(1.0, 0.0, 0.0, 1.0)
-    #     else:
-    #         scale1 = 0.3
-    #         color1 = ColorRGBA(1.0, 0.0, 0.5, 0.5)           
-    #     marker = Marker(
-    #                 type=Marker.CYLINDER,
-    #                 id=self.countm,
-    #                 lifetime=rospy.Duration(1000),
-    #                 pose=Pose(Point(goal_x, goal_y, 0.2), Quaternion(0, 0, 0, 1)),
-    #                 scale=Vector3(scale1, scale1, scale1),
-    #                 header=Header(frame_id='map'),
-    #                 color=color1)
-    #     self.marker_publisher.publish(marker)
-    #     self.countm = self.countm+1
-    # def show_text_in_rviz1(self, goal_x,goal_y):
-    #     marker1 = Marker(
-    #                 type=Marker.SPHERE,
-    #                 id=self.countm,
-    #                 lifetime=rospy.Duration(1000),
-    #                 pose=Pose(Point(goal_x, goal_y, 0.2), Quaternion(0, 0, 0, 1)),
-    #                 scale=Vector3(0.1, 0.1, 0.1),
-    #                 header=Header(frame_id='map'),
-    #                 color=ColorRGBA(1.0, 0.0, 0.8, 0.0))
-    #     self.marker_publisher.publish(marker1)
-    #     self.countm = self.countm+1
-
-    # 将激光扫描数据离散化
-    def discretize_observation(self,data,new_ranges):
-        discretized_ranges = []
-        state = []
-        min_range = 0.2
-        done = False
-
-#        mod = 720/new_ranges
-#        for i in range(1080):
-#            if data.ranges[i]<0.2:
-#                print(i)
-#                print(data.ranges[i])
-#            print(1111111111111111111111111111111111111111111111)
-        for i, item in enumerate(data.ranges):
-            if data.intensities[i]<100:
-                discretized_ranges.append(3.5)
-            elif data.ranges[i] == float ('Inf'):
-                discretized_ranges.append(3.5)
-            elif np.isnan(data.ranges[i]):
-                discretized_ranges.append(0)
-            elif data.ranges[i]>3.5:
-                discretized_ranges.append(3.5) 
-            elif data.ranges[i]<0.1:
-                discretized_ranges.append(3.5)                   
-            else:
-                discretized_ranges.append((data.ranges[i]))
-        for i in range(new_ranges):
-            state.append(np.min(discretized_ranges[i]))
-#        print(state)
-        if min_range > np.min(state):
+        #    # 获取当前区域的最小值
+        #      region_min = np.min(discretized_ranges[start_idx:end_idx])
+        
+        #    # 将最小值添加到state
+        #      state.append(region_min)
+             #state.reverse()
+ #        print(state)
+         state = discretized_ranges;
+         if min_range > np.min(state):
 #            print(data.ranges[i])
-            done = True
-#            print(np.min(state))
-        return state,done
+             done = True
+ #            print(np.min(state))
+         return state,done
+    
+# ##### # ###### ###### ##### min_pool 代码# ###### ###### ###### #####
+    def min_pool(self, state, num_pools=90):
+        # 确保输入是一维数组
+        print("state_state:", state)
+        state = np.array(state).flatten()
+        # 计算每组的大小
+        # group_size = len(state) // num_pools
+        # remainder = len(state) % num_pools
+        # 初始化结果数组
+        pooled_state = np.zeros((num_pools, 6))
+        for i in range(45):
+            # # 计算角度（与原代码保持一致）
+            #angle = i * np.pi / 45.0 - np.pi * 3/2 + np.pi/90
+            angle1 = (i * 18.0/1667)*2*np.pi + (9.0/1667)*2*np.pi
+            pooled_state[i,0] = np.cos(angle1)
+            pooled_state[i,1] = np.sin(angle1)
+            min_value1 = np.min(state[18*i : (18*i+18)])
+            pooled_state[i, 2] = min_value1
+            pooled_state[i, 3] = self.length1
+            pooled_state[i, 4] = self.length2
+            pooled_state[i, 5] = self.width        
+               
+        for i in range(45,89):
+            angle2 = (44.0*18.0/1667)*2*np.pi +  ( (i - 44.0) * (19.0/1667)*2.0*np.pi) +(19.0/3334)*2.0*np.pi
+            pooled_state[i,0] = np.cos(angle2)
+            pooled_state[i,1] = np.sin(angle2)
+            min_value2 = np.min(state[45*18 + 19*(i-44) :  45*18 +(19*(i-44)+19)])
+            pooled_state[i, 2] = min_value2
+            pooled_state[i, 3] = self.length1
+            pooled_state[i, 4] = self.length2
+            pooled_state[i, 5] = self.width 
+            
+        angle3 = (45.0 *18.0 + 44.0*19.0 /1667)  *2.0*np.pi + (10.5/1667)*2*np.pi 
+        pooled_state[89, 0] = np.cos(angle3)
+        pooled_state[89, 1] = np.sin(angle3)  
+        pooled_state[89, 2] =  np.min(state[1646: len(state)])
+        pooled_state[89, 3] = self.length1  
+        pooled_state[89, 4] = self.length2                          
+        pooled_state[89, 5] = self.width
+        
+        for i in range(90): 
+            x_dis = pooled_state[i, 0] * pooled_state[i, 2] 
+            y_dis = pooled_state[i, 1] * pooled_state[i, 2]  
+            min_value3 = math.sqrt ( x_dis*x_dis + (y_dis  + 0.05) *(y_dis  + 0.05) )
+            pooled_state[i, 1]  =  (x_dis / min_value3)
+            pooled_state[i, 0]  =  (-1* y_dis / min_value3)
+            pooled_state[i, 2] =  min_value3 
+            # if abs(x_dis)<=self.width and y_dis<=self.length1 and y_dis>=-self.length2:
+            #     self.stop_counter += 1.0    
+
+            
+        return pooled_state
+# ##### # ###### ###### ##### min_pool 代码# ###### ###### ###### #####
 
     # 执行一步动作并返回新的状态
     def step(self):
@@ -159,52 +244,78 @@ class RealWorld():
         while data is None:
             try:
                 data = rospy.wait_for_message('/scan_fusion', LaserScan, timeout=10)  # /scan -> /scan_fusion
+                # 获取范围（距离）
+                #print(type(data))
+                #print(dir(data))
                 # new code : add offset to the data.ranges(laser_link -> base_link)
-                # 添加偏移量
-                data_ranges = np.array(data.ranges) + 0.05
+                # # 添加偏移量
+                # data_ranges = np.array(data.ranges) 
+                #print("data range:", data_ranges)
+                
+                # # # #ew code : turn data 90 degrees to fit the teacher's tf 
+                # # # # 旋转数据90度（顺时针） 
+                # rotated_ranges = np.zeros_like(data_ranges)
+                # rotation_index = int(len(data_ranges) *(0.50))  
+                # rotated_ranges = np.roll(data_ranges, rotation_index)
+                # data.ranges  = rotated_ranges.tolist()
+                # data_ranges = np.array(data.ranges) 
+                # # # # # # # # # # # # # 更新LaserScan消息
+                data_length = len(data_ranges)
 
-                 # new code : turn data 90 degrees to fit the teacher's tf 
-                # 旋转数据90度（顺时针）
-                rotated_ranges = np.zeros_like(data_ranges)
-                rotation_index = int(len(data_ranges) * 0.25)  # 90度对应四分之一的数组长度
-                rotated_ranges = np.roll(data_ranges, rotation_index)
+                # 计算四分之一长度
+                quarter_length = data_length // 4
 
-                # 更新LaserScan消息
-                data.ranges = rotated_ranges.tolist()
+                # 重新排列数据，从右侧开始逆时针扫描
+                data_ranges1 = np.concatenate( (data_ranges[data_length-quarter_length:data_length], data_ranges[0:data_length-quarter_length]) )
+                data_ranges = data_ranges1
+                print("data range:", data_ranges)
+                # data.ranges = rotated_ranges.tolist()
 
                 # 调整角度相关的参数
                 data.angle_min = (data.angle_min - np.pi/2) % (2*np.pi) - np.pi
                 data.angle_max = (data.angle_max - np.pi/2) % (2*np.pi) - np.pi
                 if data.angle_max < data.angle_min:
                     data.angle_max += 2*np.pi
-
             except:
                 pass
-        state,done = self.discretize_observation(data,1667)
-        state = np.reshape(state,(1667))  # 360 points 
+        # youbaocuo
+        num_of_points =360
+        # state,done = self.discretize_observation(data,num_of_points)
         
-        # 处理激光扫描数据
-        pool_state = np.zeros((90,6))  # min_pooling - > 90
-        for i in range(90):
-            pool_state[i,0] = np.cos(i*np.pi/45.0-np.pi*3/2+np.pi/90)  # direction angle 
-            pool_state[i,1] = np.sin(i*np.pi/45.0-np.pi*3/2+np.pi/90)
-            dis = np.min(state[4*i:(4*i+4)])
-            x_dis = pool_state[i,0]*dis
-            y_dis = pool_state[i,1]*dis
-            pool_state[i,2] = dis
-            pool_state[i,3] = self.length1
-            pool_state[i,4] = self.length2
-            pool_state[i,5] = self.width
-            #if abs(x_dis)<=self.width and y_dis<=self.length1 and y_dis>=-self.length2:
-                #self.stop_counter += 1.0
-
-#            if abs( pool_state[i,0])<=0.2 and abs(pool_state[i,1])<=0.2:
-#                self.stop_counter =1 
-        pool_state = np.reshape(pool_state,(540))
-#        print(state)
-        reward = 1
-
         # 计算相对于目标的位置和角度
+        #state = np.reshape(state,(num_of_points))  # 360 points 
+        # 处理激光扫描数据
+        # pool_state = np.zeros((90,6))  # min_pooling - > 90
+        # for i in range(90):
+        #      pool_state[i,0] = np.cos(i*np.pi/45.0-np.pi*3/2+np.pi/90)  # direction angle 
+        #      pool_state[i,1] = np.sin(i*np.pi/45.0-np.pi*3/2+np.pi/90)
+        #      dis = np.min(state[4*i:(4*i+4)])
+        #      x_dis = pool_state[i,0]*dis
+        #      y_dis = pool_state[i,1]*dis
+        #      pool_state[i,2] = dis
+        #      pool_state[i,3] = self.length1
+        #      pool_state[i,4] = self.length2
+        #      pool_state[i,5] = self.width
+        # if abs(x_dis)<=self.width and y_dis<=self.length1 and y_dis>=-self.length2:
+        #         self.stop_counter += 1.0
+
+        # if abs( pool_state[i,0])<=0.2 and abs(pool_state[i,1])<=0.2:
+        #         self.stop_counter =1 
+        #  处理激光扫描数据  
+        state,done = self.discretize_observation(data)
+        #state = data_ranges
+        pool_state = self.min_pool(state)
+        data1 = pool_state[0:90, 1]
+        data2 = pool_state[0:90, 0]
+        
+        # # 打印数据
+        print("pool_state[:,1]:", data1)
+        print("\npool_state[:,0]:",data2)
+        
+        #  update724:  发布 pool_state 数据到 Rviz
+        self.publish_pool_state(pool_state)       
+        pool_state = np.reshape(pool_state,(540))
+        reward = 1
         in_pose = self.robot_pose.pose.pose
         position = [in_pose.position.x,in_pose.position.y]
         abs_x = self.target_position[0] - in_pose.position.x
@@ -216,18 +327,22 @@ class RealWorld():
         rela = np.matmul(trans_matrix,np.array([[abs_x],[abs_y]]))
         rela_x = rela[0,0]
         rela_y = rela[1,0]
+        done = False
         rela_distance = np.sqrt(rela_x** 2 + rela_y ** 2)
         rela_angle = np.arctan2(rela_y,rela_x)
-
+        min_range = 0.2
+        if min_range > np.min(state):
+            done = True 
         # 检查是否到达目标
         if rela_distance<=0.2:
             terminate=True
             reset = True
-#        if done:
-#            terminate=True
-#        if np.abs(rela_angle)>np.pi-0.1:
-#            terminate=True
-#            reset = True
+            self.stop
+        if done:
+           terminate=True
+        if np.abs(rela_angle)>np.pi-0.1:
+            terminate=True
+            reset = True
 #        print(rela_distance)
 #        print(rela_angle)
 

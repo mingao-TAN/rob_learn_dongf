@@ -20,7 +20,7 @@ from rosgraph_msgs.msg import Clock
 from actionlib_msgs.msg import GoalID
 from geometry_msgs.msg import PoseStamped, Point, Pose, Pose2D
 from std_msgs.msg import Int8
-
+# 创建仿真环境
 class StageWorld():
     def __init__(self, beam_num):
          # initiliaze

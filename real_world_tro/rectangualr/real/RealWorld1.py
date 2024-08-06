@@ -146,7 +146,7 @@ class RealWorld():
             pool_state[i,1] = np.sin(i*np.pi/45.0-np.pi/2+np.pi/90)
             dis = np.min(state[4*i:(4*i+4)])
             x_dis = pool_state[i,0]*dis
-            y_dis = pool_state[i,1]*dis
+            y_dis = pool_state[i,1]*dis 
             pool_state[i,2] = dis
             pool_state[i,3] = self.length1
             pool_state[i,4] = self.length2

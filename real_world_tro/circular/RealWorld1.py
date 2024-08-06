@@ -85,6 +85,7 @@ class RealWorld():
                     color=color1)
         self.marker_publisher.publish(marker)
         self.countm = self.countm+1
+        
     def show_text_in_rviz1(self, goal_x,goal_y):
         marker1 = Marker(
                     type=Marker.SPHERE,

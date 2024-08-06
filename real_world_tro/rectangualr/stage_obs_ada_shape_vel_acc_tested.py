@@ -196,6 +196,7 @@ class StageWorld():
 #        if abs(target_x) < 2. and abs(target_y) < 2.:
 #            pass_flag = False
         return pass_flag
+    
     def robotPointCheck(self,x,y):
         target_x = x
         target_y = y

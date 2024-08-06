@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import numpy as np
 import tensorflow as tf
 import time
@@ -5,23 +6,25 @@ import core_config_GMM_ada_shape_vel_acc as core
 from core_config_GMM_ada_shape_vel_acc import get_vars
 # stage_dot_11 has larger linear velocity
 from RealWorld1 import RealWorld
+#from Realworld1_update0710 import RealWorld
 nets = 80
 epi=499
 import rospy
 LENGTH = 0.45 # [m]
-WIDTH1 = 0.50  # [m]
+WIDTH1 = 0.50  # [m]    # 定义一个经验回放缓冲区类，用于 SAC 算法。
 LENGTH2 = 0.55 # [m]
 LENGTH1 = LENGTH+LENGTH2
 BACKTOWHEEL1 = LENGTH2  # [m]
 WHEEL_LEN = 0.36  # [m]
-WHEEL_WIDTH = 0.24  # [m]
+WHEEL_WIDTH = 0.80  # [m][3.09, 0]
 TREAD = 0.7  # [m]
 WB = 0.5 # [m]
 class ReplayBuffer:
     """
-    A simple FIFO experience replay buffer for SAC agents.
-    """
-
+    A simple FIFO experience replay buffer for SAC agents.575
+    """ 
+    # 定义一个经验回放缓冲区类，用于 SAC 算法。
+    # 初始化方法，定义缓冲区的尺寸和数据存储结构。
     def __init__(self, obs_dim, act_dim, size):
         self.obs1_buf = np.zeros([size, obs_dim], dtype=np.float32)
         self.obs2_buf = np.zeros([size, obs_dim], dtype=np.float32)
@@ -29,7 +32,7 @@ class ReplayBuffer:
         self.rews_buf = np.zeros(size, dtype=np.float32)
         self.done_buf = np.zeros(size, dtype=np.float32)
         self.ptr, self.size, self.max_size = 0, 0, size
-
+ # 存储新的经验到缓冲区中。
     def store(self, obs, act, rew, next_obs, done):
         self.obs1_buf[self.ptr] = obs
         self.obs2_buf[self.ptr] = next_obs
@@ -38,7 +41,7 @@ class ReplayBuffer:
         self.done_buf[self.ptr] = done
         self.ptr = (self.ptr+1) % self.max_size
         self.size = min(self.size+1, self.max_size)
-
+ # 从缓冲区中随机抽取一个批次的经验样本。
     def sample_batch(self, batch_size=128):
         idxs = np.random.randint(0, self.size, size=batch_size)
         return dict(obs1=self.obs1_buf[idxs],
@@ -91,7 +94,7 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
                                            | q1(x, pi(x)).
             ``q2_pi``    (batch,)          | Gives the composition of ``q2`` and 
                                            | ``pi`` for states in ``x_ph``: 
-                                           | q2(x, pi(x)).
+                                           | q2(x, pi(x)).575
             ``v``        (batch,)          | Gives the value estimate for states
                                            | in ``x_ph``. 
             ===========  ================  ======================================
@@ -231,7 +234,8 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
     trainables = tf.trainable_variables()
     trainable_saver = tf.train.Saver(trainables,max_to_keep=None)
     sess.run(tf.global_variables_initializer())
-    trainable_saver.restore(sess,"/home/zhw/rect/Realworld/real_world_tro/rectangualr/configback540GMMdense1lambda0-100")
+    # trainable_saver.restore(sess,"/home/zhw/rect/Realworld/real_world_tro/rectangualr/configback540GMMdense1lambda0-100")
+    trainable_saver.restore(sess,"/home/wheeltec-client/Desktop/rob_learn_dongf-real_world_test/real_world_tro/rectangualr/configback540GMMdense1lambda0-100")
 #    trainable_saver.restore(sess,"/home/zhw1993/Monocular-Obstacle-Avoidance/D3QN/sac_multi_constrain/retrain/-2899")
     # Setup model saving
 #    logger.setup_tf_saver(sess, inputs={'x': x_ph, 'a': a_ph}, 
@@ -240,7 +244,6 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
     def get_action(o, deterministic=False):
         act_op = mu if deterministic else pi
         return sess.run(act_op, feed_dict={x_ph: o.reshape(1,-1)})[0]
-
     # Main loop: collect experience in env and update/log each epoch
     env = RealWorld()
     rate = rospy.Rate(10)
@@ -250,7 +253,8 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
     env.reset()
 #    for i in range(100):
 #        env.show_text_in_rviz(i,i)
-    while episode < MAX_EPISODE:
+
+    while episode < MAX_EPISODE :
             env.publish_goal()
             start_time = time.time()
             if episode==0:
@@ -259,13 +263,18 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
 #                traj[episode,0,1]=
             for T in range(1000):
                 print(T)
-                traj[episode,T,0]=position[0]
-                traj[episode,T,1]=position[1]
-                env.show_text_in_rviz(position[0],position[1])
+                # traj[episode,T,0]=position[0]
+                # traj[episode,T,1]=position[1]
+                # env.show_text_in_rviz(position[0],position[1])
 #                T = T+1
+                print(o)
+            # 添加停止模块      
+            # while goal_reach:
+            #            env.stop()
+            #            break            
+            # while not goal_reach:
                 a = get_action(o)
-                print(a)
-        
+                print(a)  
                 # Step the env
                 env.Control(a)
                 rate.sleep()
@@ -274,19 +283,21 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
                 o2, r, d,goal_reach,position= env.step()
                 o = o2
                 np.save(str(sac)+".npy",traj)
-                if d:
-                    end_time = time.time()
-                    dtime[episode] = end_time-start_time
-                    print(dtime[episode])
-                    np.save(str(sac)+"dtime.npy",dtime)
-                    for k in range(T,T+20):
-                        o, r, d,goal_reach,position =env.step()
-                        traj[episode,k,0]=position[0]
-                        traj[episode,k,1]=position[1] 
-                        rate.sleep()    
-                    np.save(str(sac)+".npy",traj)                                    
-                    break
+                # if d:
+                #     end_time = time.time()
+                #     dtime[episode] = end_time-start_time
+                #     print(dtime[episode])
+                #     np.save(str(sac)+"dtime.npy",dtime)
+                #     for k in range(T,T+20):
+                #         o, r, d,goal_reach,position =env.step()
+                #         traj[episode,k,0]=position[0]
+                #         traj[episode,k,1]=position[1] 
+                #         rate.sleep()    
+                #     np.save(str(sac)+".npy",traj)                                    
+                #     break
             episode = episode+1
+
+            
 def main():
     sac(actor_critic=core.mlp_actor_critic)
 if __name__ == '__main__':
