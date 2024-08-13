@@ -42,57 +42,47 @@ class RealWorld():
         rospy.init_node('RealWorld', anonymous=False)
 #        self.cmd_vel = rospy.Publisher('cmd_vel_mux/input/navi', Twist, queue_size = 10)
 
-        # 创建发布者，用于发送速度命令
-        # self.cmd_vel = rospy.Publisher('cmd_vel_mux/input/navi', Twist, queue_size = 10)
-        # 测试 test
+        # 创建发布者，用于发送速度命令 测试 test
         self.cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
 #        self.action_table = [[-1.,-1.],[-1.,0.],[-1.,1.],[0.,-1.],[0.,0.],[0.,1.],[1.,-1.],[1.,0.],[1.,1.]]
 
-        # 设置动作和加速度的限制
-        # #self.max_action = [0.5, np.pi/2]  # 最大线速度和角速度
-        #快的情况
+        #  -------------- update 724  by mingao :  设置动作和加速度的限制 ------------------------  #
+        #  -------------- update 724  by mingao : 快的情况 ------------------------  #
         # self.max_action = [1.0, np.pi/2]  # 最大线速度和角速度
         # self.min_action = [0.0, 0.0]  # 最小线速度和角速度
         # self.max_acc = [1.0, np.pi]  # 最大线加速度和角加速度
         # self.self_speed = [0.3, 0.3]  # 初始速度
-        #慢的情况
+        #  -------------- update 724  by mingao : 慢的情况 ------------------------  #
         self.max_action = [0.5, 0.5]  # 最大线速度和角速度
         self.min_action = [0.0, 0.0]  # 最小线速度和角速度
         self.max_acc = [1.0, np.pi]  # 最大线加速度和角加速度
         self.self_speed = [0.3, 0.3]  # 初始速度
         
-        # 订阅机器人位姿和速度信息 1. 自适应蒙特卡洛方法 2.里程计信息
+        #  -------------- update 724  by mingao : 订阅机器人位姿和速度信息 1. 自适应蒙特卡洛方法 2.里程计信息 ------------------------  #
         self.robot_pose_sub = rospy.Subscriber("amcl_pose", PoseWithCovarianceStamped,self.PoseCallback) 
         self.robot_twist_sub = rospy.Subscriber("/odom", Odometry,self.TwistCallback) 
         # update
         self.marker_pub = rospy.Publisher('pool_state_marker', Marker, queue_size=10)
-        # 设置目标位置和多个目标点
-        # self.target_position = [-0.10, 1.53]
-        # self.targets = [[-0.10, 1.53], [-2.4, -0.05], [-4.1, -0.739], [0.0, -0.663]]
-        # self.count = 0
     
-        self.target_position = [2.79, -3.5]
-        self.targets = [ [2.79, -3.5] ,[0.05, -4.24] ]
+    #  -------------- changed by shanze : office 1 target 3.25, -0.411  office2 : 3.12, -2.99 ------------------------  #
+        self.target_position = [2.76, -0.53]
+        self.targets = [[2.76, -0.53], [3.15, -2.86]]
         self.count = 0
 
-        #the size of the real robot
-        # self.max_action[0] = 0.5
-        # self.max_action[1] = np.pi/2
-        # self.max_acc[0] = 1.0
-        # self.max_acc[1] = np.pi
         print("action bound is", self.max_action,"acc bound is", self.max_acc)
 
-        # 设置机器人的物理参数 更新版本 存在问题；
-        self.length1=0.210 # front length : action core -> base  -> 0.15 (core <-> camera)
-        self.length2=0.510 # back length : action core -> base -> 0.51 (core <-> back)
-        self.width=0.375  # half width  -> 0.375
+    #  -------------- update 724  by mingao : set the robot length and width------------------------  #
+        self.length1=0.3 # front length : action core -> base  -> 0.15 (core <-> camera)
+        self.length2=0.6 # back length : action core -> base -> 0.51 (core <-> back)
+        self.width=0.4  # half width  -> 0.375
         self.control_period=0.2  # 控制周期
 #        rospy.sleep(2.)
         # self.marker_publisher = rospy.Publisher('visualization_marker', Marker, queue_size=0)
         self.countm = 1
 #        rospy.sleep(2.0)                                                             
 #        self.show_text_in_rviz(marker_publisher, 'Goal',self.target_position[0],self.target_position[1])
-    #### update 724: 发布相关状态 ####
+
+    #  -------------- update 724  by mingao : add the pool state in rviz  ------------------------  #
     def publish_pool_state(self, pool_state):
         marker = Marker()
         marker.header.frame_id = "base_link"
@@ -121,35 +111,24 @@ class RealWorld():
 
         self.marker_pub.publish(marker) 
 
-          #### update 724: 发布相关状态 ####     
+    #  -------------- update by mingao :  发布相关状态 ------------------------  #
     
-    # 回调函数，用于更新机器人位姿
+    #  -------------- 回调函数，用于更新机器人位姿 ------------------------  #
     def PoseCallback(self, pose):
         self.robot_pose = pose
 
-    # 回调函数，用于更新机器人速度150
+    #  -------------- 回调函数，用于更新机器人速度 ------------------------  #
     def TwistCallback(self, twist):
         self.robot_twist = twist
     
-#     # 将激光扫描数据离散化
+   #  -------------- update by mingao :   将激光扫描数据离散化 ------------------------  #
     def discretize_observation(self,data):
          discretized_ranges = []
          state = []
          min_range = 0.2
          done = False
-        
- #        mod = 720/new_ranges
- #        for i in range(1080):
-##            if data.ranges[i]<0.2:
- #                print(i)
- #                print(data.ranges[i])
- #            print(1111111111111111111111111111111111111111111111)
-         # for i, item in enumerate(resampled_ranges):
-         #     # if data.intensities[i]<100:
             
          for i, item in enumerate(data.ranges):
-             # if data.intensities[i]<100:
-             #     discretized_ranges.append(3.5)
              if data.ranges[i] == float ('Inf'):
                  discretized_ranges.append(3.5)
              elif np.isnan(data.ranges[i]):
@@ -160,35 +139,18 @@ class RealWorld():
              #       discretized_ranges.append(3.5)                   
              else:
                  discretized_ranges.append((data.ranges[i]))
-        #  region_size = len(discretized_ranges) // new_ranges
-                
-        #  for i in range(new_ranges):
-        #      start_idx = i * region_size
-        #      end_idx = (i + 1) * region_size if i !=new_ranges - 1 else len(discretized_ranges)
-
-        #    # 获取当前区域的最小值
-        #      region_min = np.min(discretized_ranges[start_idx:end_idx])
-        
-        #    # 将最小值添加到state
-        #      state.append(region_min)
-             #state.reverse()
- #        print(state)
          state = discretized_ranges;
          if min_range > np.min(state):
 #            print(data.ranges[i])
              done = True
  #            print(np.min(state))
          return state,done
-    
-# ##### # ###### ###### ##### min_pool 代码# ###### ###### ###### #####
+
+# ------------------------ change by mingao, 0813 minpool 代码: 将1667个点转为90个，采用分段转换的方法 ------------------------  #
     def min_pool(self, state, num_pools=90):
         # 确保输入是一维数组
         print("state_state:", state)
         state = np.array(state).flatten()
-        # 计算每组的大小
-        # group_size = len(state) // num_pools
-        # remainder = len(state) % num_pools
-        # 初始化结果数组
         pooled_state = np.zeros((num_pools, 6))
         for i in range(45):
             # # 计算角度（与原代码保持一致）
@@ -232,9 +194,8 @@ class RealWorld():
 
             
         return pooled_state
-# ##### # ###### ###### ##### min_pool 代码# ###### ###### ###### #####
 
-    # 执行一步动作并返回新的状态
+# ------------------------ change by mingao： 执行一步动作并返回新的状态 ------------------------  #
     def step(self):
         data = None
         terminate= False
@@ -244,28 +205,13 @@ class RealWorld():
         while data is None:
             try:
                 data = rospy.wait_for_message('/scan_fusion', LaserScan, timeout=10)  # /scan -> /scan_fusion
-                # 获取范围（距离）
-                #print(type(data))
-                #print(dir(data))
-                # new code : add offset to the data.ranges(laser_link -> base_link)
-                # # 添加偏移量
-                # data_ranges = np.array(data.ranges) 
-                #print("data range:", data_ranges)
-                
-                # # # #ew code : turn data 90 degrees to fit the teacher's tf 
-                # # # # 旋转数据90度（顺时针） 
-                # rotated_ranges = np.zeros_like(data_ranges)
-                # rotation_index = int(len(data_ranges) *(0.50))  
-                # rotated_ranges = np.roll(data_ranges, rotation_index)
-                # data.ranges  = rotated_ranges.tolist()
-                # data_ranges = np.array(data.ranges) 
                 # # # # # # # # # # # # # 更新LaserScan消息
                 data_length = len(data_ranges)
 
-                # 计算四分之一长度
+# ------------------------ change by mingao： 计算四分之一长度 ------------------------  #
                 quarter_length = data_length // 4
 
-                # 重新排列数据，从右侧开始逆时针扫描
+# ------------------------ change by mingao： 重新排列数据，从右侧开始逆时针扫描 ------------------------  #
                 data_ranges1 = np.concatenate( (data_ranges[data_length-quarter_length:data_length], data_ranges[0:data_length-quarter_length]) )
                 data_ranges = data_ranges1
                 print("data range:", data_ranges)
@@ -278,32 +224,8 @@ class RealWorld():
                     data.angle_max += 2*np.pi
             except:
                 pass
-        # youbaocuo
-        num_of_points =360
-        # state,done = self.discretize_observation(data,num_of_points)
-        
-        # 计算相对于目标的位置和角度
-        #state = np.reshape(state,(num_of_points))  # 360 points 
-        # 处理激光扫描数据
-        # pool_state = np.zeros((90,6))  # min_pooling - > 90
-        # for i in range(90):
-        #      pool_state[i,0] = np.cos(i*np.pi/45.0-np.pi*3/2+np.pi/90)  # direction angle 
-        #      pool_state[i,1] = np.sin(i*np.pi/45.0-np.pi*3/2+np.pi/90)
-        #      dis = np.min(state[4*i:(4*i+4)])
-        #      x_dis = pool_state[i,0]*dis
-        #      y_dis = pool_state[i,1]*dis
-        #      pool_state[i,2] = dis
-        #      pool_state[i,3] = self.length1
-        #      pool_state[i,4] = self.length2
-        #      pool_state[i,5] = self.width
-        # if abs(x_dis)<=self.width and y_dis<=self.length1 and y_dis>=-self.length2:
-        #         self.stop_counter += 1.0
-
-        # if abs( pool_state[i,0])<=0.2 and abs(pool_state[i,1])<=0.2:
-        #         self.stop_counter =1 
-        #  处理激光扫描数据  
+# ------------------------ change by mingao： 处理激光扫描数据 ------------------------  #
         state,done = self.discretize_observation(data)
-        #state = data_ranges
         pool_state = self.min_pool(state)
         data1 = pool_state[0:90, 1]
         data2 = pool_state[0:90, 0]
@@ -312,7 +234,7 @@ class RealWorld():
         print("pool_state[:,1]:", data1)
         print("\npool_state[:,0]:",data2)
         
-        #  update724:  发布 pool_state 数据到 Rviz
+# ------------------------ change by mingao, 0724:  发布 pool_state 数据到 Rviz ------------------------  #
         self.publish_pool_state(pool_state)       
         pool_state = np.reshape(pool_state,(540))
         reward = 1
@@ -331,9 +253,9 @@ class RealWorld():
         rela_distance = np.sqrt(rela_x** 2 + rela_y ** 2)
         rela_angle = np.arctan2(rela_y,rela_x)
         min_range = 0.2
-        if min_range > np.min(state):
-            done = True 
-        # 检查是否到达目标
+        # if min_range > np.min(state):
+        #     done = True 
+# ------------------------ change by mingao:  检查是否到达目标 ------------------------  #
         if rela_distance<=0.2:
             terminate=True
             reset = True
@@ -357,18 +279,18 @@ class RealWorld():
         return state,reward, terminate,reset,position
     
 
-    # 控制机器人移动
+# ------------------------ 控制机器人移动------------------------  #
     def Control(self,action):
         in_twist = self.robot_twist.twist.twist
         v = in_twist.linear.x
         w = in_twist.angular.z
 
-        # 计算新的速度，考虑加速度限制
+# ------------------------ 计算新的速度，考虑加速度限制------------------------  #
         self.self_speed[0] = np.clip(action[0]*self.max_action[0],v-self.max_acc[0]*self.control_period,v+self.max_acc[0]*self.control_period)
 #        print(self.self_speed[0])        
         self.self_speed[1] =  np.clip(action[1]*self.max_action[1],w-self.max_acc[1]*self.control_period,w+self.max_acc[1]*self.control_period)
 
-        # 发布速度命令
+# ------------------------ 发布速度命令------------------------  #
         move_cmd = Twist()
         move_cmd.linear.x = self.self_speed[0]
         move_cmd.linear.y = 0.
@@ -378,20 +300,20 @@ class RealWorld():
         move_cmd.angular.z = self.self_speed[1]
         self.cmd_vel.publish(move_cmd)
 
-    # 发布新的目标点
+# ------------------------ 发布新的目标点------------------------  #
     def publish_goal(self):
         self.target_position[0] =  self.targets[self.count][0]
         self.target_position[1] =  self.targets[self.count][1]
         self.count = self.count+1
 
-    # 停止机器人
+# ------------------------ 停止机器人------------------------  #
     def stop(self):
         move_cmd = Twist()
         move_cmd.linear.x = 0
         move_cmd.angular.z = 0
         self.cmd_vel.publish(move_cmd)
         
-    # 重置环境
+# ------------------------ 重置环境------------------------  #
     def reset(self):
         # Resets the state of the environment and returns an initial observation.
 #        rospy.sleep(4.0)
