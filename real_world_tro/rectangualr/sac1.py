@@ -284,6 +284,19 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
                 o = o2
                 np.save(str(sac)+".npy",traj)
                 
+                # if d:
+                #     end_time = time.time()
+                #     dtime[episode] = end_time-start_time
+                #     print(dtime[episode])
+                #     np.save(str(sac)+"dtime.npy",dtime)
+                #     for k in range(T,T+20):
+                #         o, r, d,goal_reach,position =env.step()
+                #         traj[episode,k,0]=position[0]
+                #         traj[episode,k,1]=position[1] 
+                #         rate.sleep()    
+                #     np.save(str(sac)+".npy",traj)                                    
+                #     break
+
                 if d:
                     end_time = time.time()
                     dtime[episode] = end_time-start_time
@@ -292,9 +305,11 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
                     for k in range(T,T+20):
                         o, r, d,goal_reach,position =env.step()
                         traj[episode,k,0]=position[0]
-                        traj[episode,k,1]=position[1] 
-                        rate.sleep()    
-                    np.save(str(sac)+".npy",traj)                                    
+                        traj[episode,k,1]=position[1]
+                        rate.sleep()
+                        # -------------  change by shanze 0814, add function control1 ---------
+                        env.Control1(a)
+                    np.save(str(sac)+".npy",traj)
                     break
             episode = episode+1
 
