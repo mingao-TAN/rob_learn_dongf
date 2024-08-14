@@ -53,9 +53,9 @@ class RealWorld():
         # self.max_acc = [1.0, np.pi]  # 最大线加速度和角加速度
         # self.self_speed = [0.3, 0.3]  # 初始速度
         #  -------------- update 724  by mingao : 慢的情况 ------------------------  #
-        self.max_action = [0.5, 0.5]  # 最大线速度和角速度
+        self.max_action = [0.5, np.pi/6]  # 最大线速度和角速度
         self.min_action = [0.0, 0.0]  # 最小线速度和角速度
-        self.max_acc = [1.0, np.pi]  # 最大线加速度和角加速度
+        self.max_acc = [2.0, np.pi]  # 最大线加速度和角加速度
         self.self_speed = [0.3, 0.3]  # 初始速度
         
         #  -------------- update 724  by mingao : 订阅机器人位姿和速度信息 1. 自适应蒙特卡洛方法 2.里程计信息 ------------------------  #
@@ -65,16 +65,16 @@ class RealWorld():
         self.marker_pub = rospy.Publisher('pool_state_marker', Marker, queue_size=10)
     
     #  -------------- changed by shanze : office 1 target 3.25, -0.411  office2 : 3.12, -2.99 ------------------------  #
-        self.target_position = [2.76, -0.53]
-        self.targets = [[2.76, -0.53], [3.15, -2.86]]
+        self.target_position = [1.56, -4.03]
+        self.targets = [[1.56, -4.03], [2.99, 1.18]]
         self.count = 0
 
         print("action bound is", self.max_action,"acc bound is", self.max_acc)
 
     #  -------------- update 724  by mingao : set the robot length and width------------------------  #
-        self.length1=0.3 # front length : action core -> base  -> 0.15 (core <-> camera)
-        self.length2=0.6 # back length : action core -> base -> 0.51 (core <-> back)
-        self.width=0.4  # half width  -> 0.375
+        self.length1=0.2 # front length : action core -> base  -> 0.15 (core <-> camera)
+        self.length2=0.51 # back length : action core -> base -> 0.51 (core <-> back)
+        self.width=0.32  # half width  -> 0.375
         self.control_period=0.2  # 控制周期
 #        rospy.sleep(2.)
         # self.marker_publisher = rospy.Publisher('visualization_marker', Marker, queue_size=0)
@@ -204,7 +204,7 @@ class RealWorld():
         # 获取激光扫描数据
         while data is None:
             try:
-                data = rospy.wait_for_message('/scan_fusion', LaserScan, timeout=10)  # /scan -> /scan_fusion
+                data = rospy.wait_for_message('/scan', LaserScan, timeout=10)  # /scan -> /scan_fusion
                 # # # # # # # # # # # # # 更新LaserScan消息
                 data_length = len(data_ranges)
 
@@ -214,7 +214,7 @@ class RealWorld():
 # ------------------------ change by mingao： 重新排列数据，从右侧开始逆时针扫描 ------------------------  #
                 data_ranges1 = np.concatenate( (data_ranges[data_length-quarter_length:data_length], data_ranges[0:data_length-quarter_length]) )
                 data_ranges = data_ranges1
-                print("data range:", data_ranges)
+                # print("data range:", data_ranges)
                 # data.ranges = rotated_ranges.tolist()
 
                 # 调整角度相关的参数
@@ -231,8 +231,8 @@ class RealWorld():
         data2 = pool_state[0:90, 0]
         
         # # 打印数据
-        print("pool_state[:,1]:", data1)
-        print("\npool_state[:,0]:",data2)
+        # print("pool_state[:,1]:", data1)
+        # print("\npool_state[:,0]:",data2)
         
 # ------------------------ change by mingao, 0724:  发布 pool_state 数据到 Rviz ------------------------  #
         self.publish_pool_state(pool_state)       
@@ -259,9 +259,7 @@ class RealWorld():
         if rela_distance<=0.2:
             terminate=True
             reset = True
-            self.stop
-
-
+            #self.stop
         # if done:
         #    terminate=True
         # if np.abs(rela_angle)>np.pi-0.1:
@@ -301,12 +299,9 @@ class RealWorld():
         move_cmd.angular.y = 0.
         move_cmd.angular.z = self.self_speed[1]
         self.cmd_vel.publish(move_cmd)
-
-
-#  -------------------------   change by shanze 0814, stop the robot when reaching the goal  ---------------------
-    def Control1(self):
-
-        # ------------------------ 发布速度命令------------------------ #
+        
+ # ------------------------ 发布速度命令------------------------  #   
+    def Control1(self,action):
         move_cmd = Twist()
         move_cmd.linear.x = 0
         move_cmd.linear.y = 0.
@@ -314,8 +309,8 @@ class RealWorld():
         move_cmd.angular.x = 0.
         move_cmd.angular.y = 0.
         move_cmd.angular.z = 0
-        self.cmd_vel.publish(move_cmd)
-
+        self.cmd_vel.publish(move_cmd)    
+    
 # ------------------------ 发布新的目标点------------------------  #
     def publish_goal(self):
         self.target_position[0] =  self.targets[self.count][0]
