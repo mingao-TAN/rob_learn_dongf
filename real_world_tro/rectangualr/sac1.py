@@ -241,7 +241,10 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
 #    logger.setup_tf_saver(sess, inputs={'x': x_ph, 'a': a_ph}, 
 #                                outputs={'mu': mu, 'pi': pi, 'q1': q1, 'q2': q2, 'v': v})
 
-    def get_action(o, deterministic=False):
+
+# ---- change 0814  True ----
+
+    def get_action(o, deterministic=True):
         act_op = mu if deterministic else pi
         return sess.run(act_op, feed_dict={x_ph: o.reshape(1,-1)})[0]
     # Main loop: collect experience in env and update/log each epoch
@@ -263,8 +266,8 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
 #                traj[episode,0,1]=
             for T in range(1000):
                 print(T)
-                # traj[episode,T,0]=position[0]
-                # traj[episode,T,1]=position[1]
+                traj[episode,T,0]=position[0]
+                traj[episode,T,1]=position[1]
                 # env.show_text_in_rviz(position[0],position[1])
 #                T = T+1
                 print(o)
@@ -284,19 +287,6 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
                 o = o2
                 np.save(str(sac)+".npy",traj)
                 
-                # if d:
-                #     end_time = time.time()
-                #     dtime[episode] = end_time-start_time
-                #     print(dtime[episode])
-                #     np.save(str(sac)+"dtime.npy",dtime)
-                #     for k in range(T,T+20):
-                #         o, r, d,goal_reach,position =env.step()
-                #         traj[episode,k,0]=position[0]
-                #         traj[episode,k,1]=position[1] 
-                #         rate.sleep()    
-                #     np.save(str(sac)+".npy",traj)                                    
-                #     break
-
                 if d:
                     end_time = time.time()
                     dtime[episode] = end_time-start_time
@@ -305,11 +295,11 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
                     for k in range(T,T+20):
                         o, r, d,goal_reach,position =env.step()
                         traj[episode,k,0]=position[0]
-                        traj[episode,k,1]=position[1]
-                        rate.sleep()
-                        # -------------  change by shanze 0814, add function control1 ---------
-                        env.Control1(a)
-                    np.save(str(sac)+".npy",traj)
+                        traj[episode,k,1]=position[1] 
+                        rate.sleep()    
+                        env.Control([0, 0])  # change by shanze, 0814, add stop function
+                        # env.Control1(a) #add the stop function when meeting the first target
+                    np.save(str(sac)+".npy",traj)                                    
                     break
             episode = episode+1
 
