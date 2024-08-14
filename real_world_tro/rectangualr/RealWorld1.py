@@ -260,11 +260,13 @@ class RealWorld():
             terminate=True
             reset = True
             self.stop
-        if done:
-           terminate=True
-        if np.abs(rela_angle)>np.pi-0.1:
-            terminate=True
-            reset = True
+
+
+        # if done:
+        #    terminate=True
+        # if np.abs(rela_angle)>np.pi-0.1:
+        #     terminate=True
+        #     reset = True
 #        print(rela_distance)
 #        print(rela_angle)
 
@@ -298,6 +300,20 @@ class RealWorld():
         move_cmd.angular.x = 0.
         move_cmd.angular.y = 0.
         move_cmd.angular.z = self.self_speed[1]
+        self.cmd_vel.publish(move_cmd)
+
+
+#  -------------------------   change by shanze 0814, stop the robot when reaching the goal  ---------------------
+    def Control1(self):
+
+        # ------------------------ 发布速度命令------------------------ #
+        move_cmd = Twist()
+        move_cmd.linear.x = 0
+        move_cmd.linear.y = 0.
+        move_cmd.linear.z = 0.
+        move_cmd.angular.x = 0.
+        move_cmd.angular.y = 0.
+        move_cmd.angular.z = 0
         self.cmd_vel.publish(move_cmd)
 
 # ------------------------ 发布新的目标点------------------------  #
