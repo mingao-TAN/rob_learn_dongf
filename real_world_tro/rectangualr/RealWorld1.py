@@ -53,7 +53,7 @@ class RealWorld():
         # self.max_acc = [1.0, np.pi]  # 最大线加速度和角加速度
         # self.self_speed = [0.3, 0.3]  # 初始速度
         #  -------------- update 724  by mingao : 慢的情况 ------------------------  #
-        self.max_action = [0.5, np.pi/6]  # 最大线速度和角速度
+        self.max_action = [0.5, np.pi/5]  # 最大线速度和角速度
         self.min_action = [0.0, 0.0]  # 最小线速度和角速度
         self.max_acc = [2.0, np.pi]  # 最大线加速度和角加速度
         self.self_speed = [0.3, 0.3]  # 初始速度
@@ -64,17 +64,21 @@ class RealWorld():
         # update
         self.marker_pub = rospy.Publisher('pool_state_marker', Marker, queue_size=10)
     
-    #  -------------- changed by shanze : office 1 target 3.25, -0.411  office2 : 3.12, -2.99 ------------------------  #
-        self.target_position = [1.56, -4.03]
-        self.targets = [[1.56, -4.03], [2.99, 1.18]]
+    #   ------------------------  #
+        # self.target_position = [1.56, -4.03]
+        # self.targets = [[1.56, -4.03], [1.92, 0.5]]
+        
+        # corridor0815
+        self.target_position = [3.06, 0.08]
+        self.targets = [[3.06, 0.08], [6.72, 0.139], [4.81, 2.33], [6.01, 0.193], [3.06, 0.08], [-0.38, 0.03]]
         self.count = 0
 
-        print("action bound is", self.max_action,"acc bound is", self.max_acc)
+        # print("action bound is", self.max_action,"acc bound is", self.max_acc)
 
     #  -------------- update 724  by mingao : set the robot length and width------------------------  #
-        self.length1=0.2 # front length : action core -> base  -> 0.15 (core <-> camera)
-        self.length2=0.51 # back length : action core -> base -> 0.51 (core <-> back)
-        self.width=0.32  # half width  -> 0.375
+        self.length1=0.18 # front length : action core -> base  -> 0.15 (core <-> camera)
+        self.length2=0.51 # back length : action core -> base -> 0.51 (core <-> back)   0815 : 0.25 0.56 0.36   1.0 pi/3     |    1.0 0.8  pi/3
+        self.width=0.3  # half width  -> 0.375
         self.control_period=0.2  # 控制周期
 #        rospy.sleep(2.)
         # self.marker_publisher = rospy.Publisher('visualization_marker', Marker, queue_size=0)
@@ -99,7 +103,10 @@ class RealWorld():
         marker.color.g = 0.0
         marker.color.b = 0.0
 
+        # print(pool_state.shape[0])
         for i in range(pool_state.shape[0]):
+            # print(pool_state)
+            
             y = -pool_state[i, 0] * pool_state[i, 2]
             x =  pool_state[i, 1] * pool_state[i, 2]
             z = 0
@@ -130,9 +137,10 @@ class RealWorld():
             
          for i, item in enumerate(data.ranges):
              if data.ranges[i] == float ('Inf'):
-                 discretized_ranges.append(3.5)
+                 discretized_ranges.append(10)
              elif np.isnan(data.ranges[i]):
-                 discretized_ranges.append(0)
+                 print("no data found")
+                #  discretized_ranges.append(0)
             #  elif data.ranges[i]>3.5:
             #      discretized_ranges.append(3.5) 
              # elif data.ranges[i]<0.1:
@@ -144,12 +152,13 @@ class RealWorld():
 #            print(data.ranges[i])
              done = True
  #            print(np.min(state))
+        #  print(np.min(state))
          return state,done
 
 # ------------------------ change by mingao, 0813 minpool 代码: 将1667个点转为90个，采用分段转换的方法 ------------------------  #
     def min_pool(self, state, num_pools=90):
         # 确保输入是一维数组
-        print("state_state:", state)
+        # print("state_state:", state)
         state = np.array(state).flatten()
         pooled_state = np.zeros((num_pools, 6))
         for i in range(45):
@@ -185,10 +194,19 @@ class RealWorld():
         for i in range(90): 
             x_dis = pooled_state[i, 0] * pooled_state[i, 2] 
             y_dis = pooled_state[i, 1] * pooled_state[i, 2]  
-            min_value3 = math.sqrt ( x_dis*x_dis + (y_dis  + 0.05) *(y_dis  + 0.05) )
-            pooled_state[i, 1]  =  (x_dis / min_value3)
-            pooled_state[i, 0]  =  (-1* y_dis / min_value3)
+            # print("1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111")
+            min_value3 = math.sqrt ( y_dis*y_dis + (x_dis  + 0.05) *(x_dis  + 0.05) )
+            # print(min_value3)
+            # min_value3 = 100
+            
+            # use teachers axis, x = -y; y = x + 0.05
+            pooled_state[i, 0]  =  (-1* y_dis  / min_value3)
+            
+            pooled_state[i, 1]  =  ((x_dis + 0.05) / min_value3)
+           
             pooled_state[i, 2] =  min_value3 
+
+            # print((pooled_state[i, 0])* min_value3, pooled_state[i, 1] * min_value3, pooled_state[i, 2])
             # if abs(x_dis)<=self.width and y_dis<=self.length1 and y_dis>=-self.length2:
             #     self.stop_counter += 1.0    
 
@@ -228,11 +246,11 @@ class RealWorld():
         state,done = self.discretize_observation(data)
         pool_state = self.min_pool(state)
         data1 = pool_state[0:90, 1]
-        data2 = pool_state[0:90, 0]
+        data2 = pool_state[0:90, 2]
         
         # # 打印数据
         # print("pool_state[:,1]:", data1)
-        # print("\npool_state[:,0]:",data2)
+        # print("\npool_state[:,2]:",data2)
         
 # ------------------------ change by mingao, 0724:  发布 pool_state 数据到 Rviz ------------------------  #
         self.publish_pool_state(pool_state)       
@@ -255,8 +273,8 @@ class RealWorld():
         min_range = 0.2
         # if min_range > np.min(state):
         #     done = True 
-# ------------------------ change by mingao:  检查是否到达目标 ------------------------  #
-        if rela_distance<=0.2:
+# ------------------------ change by mingao:  检查是否到达目标 ------------------------  #   0815: from 0.1  -> 0.5
+        if rela_distance<=0.5:
             terminate=True
             reset = True
             #self.stop
@@ -285,10 +303,13 @@ class RealWorld():
         v = in_twist.linear.x
         w = in_twist.angular.z
 
+# ----------------------- change by shanze 0815 comment clip-------
 # ------------------------ 计算新的速度，考虑加速度限制------------------------  #
-        self.self_speed[0] = np.clip(action[0]*self.max_action[0],v-self.max_acc[0]*self.control_period,v+self.max_acc[0]*self.control_period)
+        # self.self_speed[0] = np.clip(action[0]*self.max_action[0],v-self.max_acc[0]*self.control_period,v+self.max_acc[0]*self.control_period)
+        self.self_speed[0] = action[0]*self.max_action[0]
 #        print(self.self_speed[0])        
-        self.self_speed[1] =  np.clip(action[1]*self.max_action[1],w-self.max_acc[1]*self.control_period,w+self.max_acc[1]*self.control_period)
+        # self.self_speed[1] =  np.clip(action[1]*self.max_action[1],w-self.max_acc[1]*self.control_period,w+self.max_acc[1]*self.control_period)
+        self.self_speed[1] =  action[1]*self.max_action[1]
 
 # ------------------------ 发布速度命令------------------------  #
         move_cmd = Twist()
