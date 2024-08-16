@@ -233,7 +233,7 @@ class RealWorld():
             # 获取激光扫描数据
             while data is None:
                 try:
-                    data = rospy.wait_for_message('/scan', LaserScan, timeout=10)  # /scan -> /scan_fusion
+                    data = rospy.wait_for_message('/scan', LaserScan, timeout=100)  # /scan -> /scan_fusion
                     # # # # # # # # # # # # # 更新LaserScan消息
                     data_length = len(data_ranges)
 
