@@ -265,19 +265,19 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
             T=0
 #                traj[episode,0,1]=
             for T in range(1000):
-                print(T)
+                # print(T)
                 traj[episode,T,0]=position[0]
                 traj[episode,T,1]=position[1]
                 # env.show_text_in_rviz(position[0],position[1])
 #                T = T+1
-                print(o)
+                # print(o)
             # 添加停止模块      
             # while goal_reach:
             #            env.stop()
             #            break            
             # while not goal_reach:
                 a = get_action(o)
-                print(a)  
+                # print(a)  
                 # Step the env
                 env.Control(a)
                 rate.sleep()
@@ -297,11 +297,13 @@ def sac( actor_critic=core.mlp_actor_critic, seed=5,
                         traj[episode,k,0]=position[0]
                         traj[episode,k,1]=position[1] 
                         rate.sleep()    
-                        env.Control([0, 0])  # change by shanze, 0814, add stop function
+                        env.Control([0, 0])
                         # env.Control1(a) #add the stop function when meeting the first target
                     np.save(str(sac)+".npy",traj)                                    
                     break
             episode = episode+1
+
+
 
             
 def main():
