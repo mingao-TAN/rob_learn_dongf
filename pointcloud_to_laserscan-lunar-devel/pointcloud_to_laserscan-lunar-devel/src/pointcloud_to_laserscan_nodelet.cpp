@@ -180,7 +180,7 @@ void PointCloudToLaserScanNodelet::cloudCb(const sensor_msgs::PointCloud2ConstPt
   sensor_msgs::PointCloud2ConstPtr cloud_out;
   sensor_msgs::PointCloud2Ptr cloud;
   
-  ///////////////// changed by mingao
+  // changed by mingao:
   // Perform voxel grid filtering to downsample the point cloud
   pcl::PCLPointCloud2::Ptr pcl_cloud(new pcl::PCLPointCloud2());
   pcl::PCLPointCloud2::Ptr pcl_filtered_cloud(new pcl::PCLPointCloud2());
@@ -188,10 +188,9 @@ void PointCloudToLaserScanNodelet::cloudCb(const sensor_msgs::PointCloud2ConstPt
 
   pcl::VoxelGrid<pcl::PCLPointCloud2> voxel_filter;
   voxel_filter.setInputCloud(pcl_cloud);
-  voxel_filter.setLeafSize( 0.015f, 0.015f, 0.015f);  // Adjust the leaf size for desired sparsity
+  voxel_filter.setLeafSize( 0.015f, 0.015f, 0.0003f);  // Adjust the leaf size for desired sparsity
   voxel_filter.filter(*pcl_filtered_cloud);
-  ///////////////// changed by mingao
-  
+
   sensor_msgs::PointCloud2 filtered_cloud_msg;
   pcl_conversions::fromPCL(*pcl_filtered_cloud, filtered_cloud_msg);
 
