@@ -45,6 +45,10 @@
 #include <sensor_msgs/point_cloud2_iterator.h>
 #include <string>
 #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
+#include <pcl/common/transforms.h>
+#include <pcl/point_types.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/filters/voxel_grid.h>
 
 namespace pointcloud_to_laserscan
 {
@@ -110,6 +114,7 @@ void PointCloudToLaserScanNodelet::onInit()
 
   pub_ = nh_.advertise<sensor_msgs::LaserScan>("scan", 10, boost::bind(&PointCloudToLaserScanNodelet::connectCb, this),
                                                boost::bind(&PointCloudToLaserScanNodelet::disconnectCb, this));
+
 }
 
 void PointCloudToLaserScanNodelet::connectCb()
@@ -174,14 +179,28 @@ void PointCloudToLaserScanNodelet::cloudCb(const sensor_msgs::PointCloud2ConstPt
 
   sensor_msgs::PointCloud2ConstPtr cloud_out;
   sensor_msgs::PointCloud2Ptr cloud;
+  // changed by mingao
+  // Perform voxel grid filtering to downsample the point cloud
+  pcl::PCLPointCloud2::Ptr pcl_cloud(new pcl::PCLPointCloud2());
+  pcl::PCLPointCloud2::Ptr pcl_filtered_cloud(new pcl::PCLPointCloud2());
+  pcl_conversions::toPCL(*cloud_msg, *pcl_cloud);
+
+  pcl::VoxelGrid<pcl::PCLPointCloud2> voxel_filter;
+  voxel_filter.setInputCloud(pcl_cloud);
+  voxel_filter.setLeafSize( 0.015f, 0.015f, 0.015f);  // Adjust the leaf size for desired sparsity
+  voxel_filter.filter(*pcl_filtered_cloud);
+
+  sensor_msgs::PointCloud2 filtered_cloud_msg;
+  pcl_conversions::fromPCL(*pcl_filtered_cloud, filtered_cloud_msg);
 
   // Transform cloud if necessary
+  // Use the filtered cloud for further processing
   if (!(output.header.frame_id == cloud_msg->header.frame_id))
   {
     try
     {
       cloud.reset(new sensor_msgs::PointCloud2);
-      tf2_->transform(*cloud_msg, *cloud, target_frame_, ros::Duration(tolerance_));
+      tf2_->transform(filtered_cloud_msg, *cloud, target_frame_, ros::Duration(tolerance_));
       cloud_out = cloud;
     }
     catch (tf2::TransformException& ex)
@@ -192,8 +211,31 @@ void PointCloudToLaserScanNodelet::cloudCb(const sensor_msgs::PointCloud2ConstPt
   }
   else
   {
-    cloud_out = cloud_msg;
+    cloud_out = boost::make_shared<sensor_msgs::PointCloud2>(filtered_cloud_msg);
   }
+
+
+
+
+// if (!(output.header.frame_id == cloud_msg->header.frame_id))
+// {
+//     // 使用pcl进行转换
+//     Eigen::Matrix4f transform_matrix;
+//     // 从tf2::Transform获取转换矩阵
+//     // 这里需要实现 transform_matrix 的初始化逻辑
+//     pcl::PointCloud<pcl::PointXYZ> pcl_cloud;
+//     pcl::fromROSMsg(*cloud_msg, pcl_cloud);
+//     pcl::PointCloud<pcl::PointXYZ> pcl_transformed_cloud;
+//     pcl::transformPointCloud(pcl_cloud, pcl_transformed_cloud, transform_matrix);
+//     sensor_msgs::PointCloud2 cloud_transformed_msg;
+//     pcl::toROSMsg(pcl_transformed_cloud, cloud_transformed_msg);
+//     cloud_transformed_msg.header.frame_id = target_frame_;
+//     cloud_out = boost::make_shared<sensor_msgs::PointCloud2>(cloud_transformed_msg);
+// }
+// else
+// {
+//     cloud_out = cloud_msg;
+// }
 
   // Iterate through pointcloud
   for (sensor_msgs::PointCloud2ConstIterator<float> iter_x(*cloud_out, "x"), iter_y(*cloud_out, "y"),
